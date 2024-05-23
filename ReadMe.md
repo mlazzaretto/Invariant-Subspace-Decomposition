@@ -1,1 +1,1 @@
-### Invariant Subspace Decomposition
+# Invariant Subspace Decomposition
