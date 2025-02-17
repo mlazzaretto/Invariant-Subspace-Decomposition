@@ -1,8 +1,6 @@
 from __future__ import division
 import numpy as np
-from itertools import chain
 from uwedge import uwedge
-from utils import merge_lists
 import matplotlib.pyplot as plt
 from scipy.linalg import block_diag
 from scipy.stats import ortho_group
@@ -35,36 +33,25 @@ def jbd(M_list, threshold, diag=False):
     B = B / np.linalg.norm(B)
 
     # Detect blocks according to threshold
-    U = np.zeros_like(V)
+    U = V.copy()
 
-    blocks = [[0], ]
-    for j in range(p):
-        b = B[:, j]
-        b_ordering = list(np.argsort(-b))
-        placed = False
-        for block in blocks:
-            if j in block:
-                placed = True
-                for item in block:
-                    if item in b_ordering:
-                        b_ordering.remove(item)
-                if b_ordering:
-                    for next in b_ordering:
-                        if b[next] >= threshold:
-                            block.append(next)
-        if not placed:
-            blocks.append([j])
-            for item in chain(*blocks):
-                if item in b_ordering:
-                    b_ordering.remove(item)
-            if b_ordering:
-                for next in b_ordering:
-                    if b[next] >= threshold:
-                        blocks[-1].append(next)
-
-    blocks = merge_lists(blocks)
-    for idx_u, idx_v in enumerate(chain(*blocks)):
-        U[idx_u, :] = V[idx_v, :]
+    blocks = [1, ]
+    last = 0
+    for j in range(p-1):
+        b = B.copy()[:, j]
+        b_ord = list(np.argsort(-b[last+1:]) + last + 1)
+        while len(b_ord) > 0 and b[b_ord[0]] > threshold:
+            blocks[-1] += 1
+            last += 1
+            # Swap rows and columns
+            B[[last, b_ord[0]], :] = B[[b_ord[0], last], :]
+            B[:, [last, b_ord[0]]] = B[:, [b_ord[0], last]]
+            U[[last, b_ord[0]], :] = U[[b_ord[0], last], :]
+            b = B.copy()[:, j]
+            b_ord = list(np.argsort(-b[last+1:]) + last + 1)
+        if j == last:
+            blocks.append(1)
+            last += 1
 
     # Compute jointly block diagonalized matrices
     MBD_list = np.zeros_like(M_list)
@@ -74,7 +61,7 @@ def jbd(M_list, threshold, diag=False):
     return U, blocks, MBD_list
 
 
-def boff(MBD_list, blocks):
+def boff(MBD_list, blocks_shape):
     # Compute penalized mean of the off-block-diagonal elements
     # of a set of matrices
     # input:
@@ -89,7 +76,7 @@ def boff(MBD_list, blocks):
     # Compute mean off-block-diagonal value
     MOD_list = np.copy(MBD_list)
     C = np.zeros(MBD_list.shape[0])
-    blocks_shape = [len(block) for block in blocks]
+    # blocks_shape = [len(block) for block in blocks]
 
     if len(blocks_shape) == 1:
         for j in range(MOD_list.shape[0]):
@@ -162,11 +149,11 @@ def ajbd(M_list, diag=False):
 
 # TEST
 if __name__ == '__main__':
-    np.random.seed(0)
+    np.random.seed(1)
     p = 10   # size of the matrices to be simultaneously block diagonalized
     m = 10
     M_list = np.zeros((m, p, p))
-    threshold = 0.8
+    threshold = 0.07
     Q = ortho_group.rvs(dim=p)
 
     for j in range(m):
@@ -186,7 +173,7 @@ if __name__ == '__main__':
 
     fig, ax = plt.subplots(1, m)
     for i in range(m):
-        ax[i].imshow(np.abs(M_list_diag[i, :, :]))
+        ax[i].imshow(np.abs(MBD_list[i, :, :]))
     plt.show()
 
     U, blocks, MBD_list, t_opt, boff_opt = ajbd(M_list)
@@ -195,5 +182,5 @@ if __name__ == '__main__':
     for i in range(m):
         ax[i].imshow(np.abs(MBD_list[i, :, :]))
     plt.show()
-    print(blocks)
+    print(blocks, t_opt)
     print(boff(MBD_list, blocks))

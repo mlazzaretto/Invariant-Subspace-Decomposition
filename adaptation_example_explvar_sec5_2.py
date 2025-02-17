@@ -1,7 +1,6 @@
-# %%
 from __future__ import division
 import numpy as np
-from estimator import Estimator
+from isd import ISD
 from scipy.linalg import block_diag
 from scipy.stats import ortho_group
 import statsmodels.api as sm
@@ -112,7 +111,7 @@ def xpl_var(X, Y, beta):
 def main():
     rng = np.random.default_rng(0)
 
-    n_iter = 5
+    n_iter = 20
     p = 10
     gt_bs = [2, 4, 3, 1]
     gt_inv_blocks = np.array([False, True, True, False])
@@ -151,9 +150,9 @@ def main():
                                                             rng,
                                                             test=True,
                                                             test_value=tv)
-        est = Estimator(X_hist, Y_hist, [ws_hist]*n_rw)
-        beta_inv, _, U, blocks, c_blocks = est.invariant_est()
-        beta_ols = est.get_pooled_est()[:-1, :]
+        est = ISD(X_hist, Y_hist, [ws_hist]*n_rw)
+        beta_inv, _, U, blocks, c_blocks = est.invariant_estimator(k_fold=10)
+        beta_ols = est.get_pooled_est()[:, :]
         beta_mm = est.magging_estimator()
         beta_mm_a = beta_mm
         beta_ols_full = ols(Y_hist, X_hist)
@@ -190,7 +189,7 @@ def main():
 
             if t % ws_hist == 0:
                 n_rw += 1
-                est_a = Estimator(X, Y, [ws_hist]*n_rw)
+                est_a = ISD(X, Y, [ws_hist]*n_rw)
                 beta_mm_a = est_a.magging_estimator()
             X_train = X[-ws_train:, :]
             Y_train = Y[-ws_train:]
@@ -199,7 +198,7 @@ def main():
             gamma_0_t = gamma_train[t, :].reshape(-1, 1)
 
             gamma_ols = ols(Y_train, X_train)
-            beta_ols_full = ols(Y, X)
+            beta_ols_full = ols(Y_hist, X_hist)
 
             # Oracle time adaptation
             if gt_inv_blocks.any():
@@ -237,7 +236,7 @@ def main():
             xpl_v[iter, 3, t] = xpl_var(X_test, Y_test, delta_res+beta_inv)
             xpl_v[iter, 4, t] = xpl_var(X_test, Y_test, beta_inv)
             xpl_v[iter, 5, t] = xpl_var(X_test, Y_test, gamma_ols)
-            xpl_v[iter, 6, t] = xpl_var(X_test, Y_test, beta_ols)
+            xpl_v[iter, 6, t] = xpl_var(X_test, Y_test, beta_ols_full)
             xpl_v[iter, 7, t] = xpl_var(X_test, Y_test, beta_mm)
             xpl_v[iter, 8, t] = xpl_var(X_test, Y_test, beta_mm_a)
 
@@ -263,12 +262,6 @@ def main():
                            layout='constrained')
     if mean:
         a = 1
-        l1, = ax.plot(np.arange(T),
-                      np.cumsum(np.mean(xpl_v[:, 1, :], axis=0)),
-                      label=r'$\beta^{\text{inv}}\text{(oracle)}$' +
-                      r'$+\hat{\delta}^{\text{res}}_t$',
-                      color=c[0],
-                      alpha=a)
         l2, = ax.plot(np.arange(T),
                       np.cumsum(np.mean(xpl_v[:, 4, :], axis=0)),
                       label=r'$\hat{\beta}^{\text{inv}}$',
@@ -277,9 +270,9 @@ def main():
                       alpha=a)
         l3, = ax.plot(np.arange(T),
                       np.cumsum(np.mean(xpl_v[:, 3, :], axis=0)),
-                      label=r'$\hat{\beta}^{\text{inv}}+$' +
-                      r'$\hat{\delta}^{\text{res}}_t$' +
-                      r'$=\hat{\gamma}^{\text{ISD}}_t$',
+                      label=r'$\hat{\gamma}^{\text{ISD}}_t=$' +
+                      r'$\hat{\beta}^{\text{inv}}+$' +
+                      r'$\hat{\delta}^{\text{res}}_t$',
                       color=c[2],
                       alpha=a)
         l4, = ax.plot(np.arange(T),
@@ -307,15 +300,6 @@ def main():
                       alpha=a)
     if std:
         a = 0.15
-        ax.fill_between(np.arange(T),
-                        np.cumsum(np.mean(xpl_v[:, 1, :], axis=0)) -
-                        (np.std(np.cumsum(xpl_v[:, 1, :], axis=-1), axis=0)),
-                        np.cumsum(np.mean(xpl_v[:, 1, :], axis=0)) +
-                        (np.std(np.cumsum(xpl_v[:, 1, :], axis=-1), axis=0)),
-                        label=r'$\beta^{\text{inv}}$' +
-                        r'$+\hat{\delta}^{\text{res}}_t$',
-                        color=c[0],
-                        alpha=a)
         ax.fill_between(np.arange(T),
                         np.cumsum(np.mean(xpl_v[:, 4, :], axis=0)) -
                         (np.std(np.cumsum(xpl_v[:, 4, :], axis=-1), axis=0)),
@@ -373,14 +357,14 @@ def main():
     leg3 = fig.legend(bbox_to_anchor=(1, 1.02),
                       handles=[l6, ], loc='outside left upper',
                       title=r'\textbf{Ground truth}')
-    leg1 = fig.legend(bbox_to_anchor=(1, 0.22),
+    leg1 = fig.legend(bbox_to_anchor=(1, 0.3),
                       handles=[l2, l7, l5],
                       loc='outside left center',
-                      title=r'\textbf{Estimators using history only}')
-    leg2 = fig.legend(bbox_to_anchor=(1, 0.395),
-                      handles=[l1, l3, l4],
+                      title=r'\textbf{Zero-shot prediction}')
+    leg2 = fig.legend(bbox_to_anchor=(1, 0.48),
+                      handles=[l3, l4],
                       loc='outside left lower',
-                      title=r'\textbf{Rolling window estimators}')
+                      title=r'\textbf{Time adaptation estimators}')
     fig.add_artist(leg1)
     fig.add_artist(leg3)
     fig.add_artist(leg2)
@@ -454,53 +438,44 @@ def main():
         bp[i]['cmeans'].set_color(c[ord[i]])
         axs0[i].set_ylim([0, 1.5])
 
-    l1, = ax[1].plot(np.arange(T), np.cumsum(xpl_v[iter, 1, :]),
-                     label=r'$\beta^{\text{inv}}\text{(oracle)}$' +
-                     r'$+\hat{\delta}^{\text{res}}_t$',
-                     linewidth=1.4,
-                     color=c[0],
-                     alpha=a)
-    l2, = ax[1].plot(np.arange(T), np.cumsum(xpl_v[iter, 4, :]),
+    st = 1
+
+    l2, = ax[1].plot(np.arange(T-st), np.cumsum(xpl_v[iter, 4, st:]),
                      label=r'$\hat{\beta}^{\text{inv}}$',
                      linestyle='--',
                      color=c[1],
                      alpha=a)
-    l3, = ax[1].plot(np.arange(T), np.cumsum(xpl_v[iter, 3, :]),
-                     label=r'$\hat{\beta}^{\text{inv}}+$' +
-                     r'$\hat{\delta}^{\text{res}}_t$' +
-                     r'$=\hat{\gamma}^{\text{ISD}}_t$',
+    l3, = ax[1].plot(np.arange(T-st), np.cumsum(xpl_v[iter, 3, st:]),
+                     label=r'$\hat{\gamma}^{\text{ISD}}_t=$' +
+                     r'$\hat{\beta}^{\text{inv}}+$' +
+                     r'$\hat{\delta}^{\text{res}}_t$',
                      color=c[2],
                      alpha=a)
-    l4, = ax[1].plot(np.arange(T), np.cumsum(xpl_v[iter, 5, :]),
+    l4, = ax[1].plot(np.arange(T-st), np.cumsum(xpl_v[iter, 5, st:]),
                      label=r'$\hat{\gamma}^{\text{OLS}}_t$',
                      color=c[3],
                      alpha=a)
-    l5, = ax[1].plot(np.arange(T), np.cumsum(xpl_v[iter, 8, :]),
+    l5, = ax[1].plot(np.arange(T-st), np.cumsum(xpl_v[iter, 8, st:]),
                      label=r'$\hat{\beta}^{\text{mm}}$',
                      linestyle='--',
                      color=c[4],
                      alpha=a)
-    l6, = ax[1].plot(np.arange(T), np.cumsum(xpl_v[iter, 0, :]),
+    l6, = ax[1].plot(np.arange(T-st), np.cumsum(xpl_v[iter, 0, st:]),
                      label=r'$\gamma_{0, t}$',
                      linestyle=':',
                      color=c[5],
                      alpha=a)
-    l7, = ax[1].plot(np.arange(T), np.cumsum(xpl_v[iter, 6, :]),
+    l7, = ax[1].plot(np.arange(T-st), np.cumsum(xpl_v[iter, 6, st:]),
                      label=r'$\hat{\beta}^{\text{OLS}}$',
                      linestyle='--',
                      color=c[6],
                      alpha=a)
-    l13, = ax[1].plot(np.arange(T), np.cumsum(xpl_v[iter, 2, :]),
-                      label=r'$\beta^{\text{inv}}\text{(oracle)}$',
-                      linestyle='--',
-                      color=c[0],
-                      alpha=a)
     temp, = axs0[0].plot(np.zeros(3), np.zeros(3), alpha=0, label='')
-    ax[0].grid(color='grey', axis='y', linestyle='-', linewidth=0.25,
-               alpha=0.25)
+    ax[0].grid(color='grey', axis='y', linestyle='-.', linewidth=0.25,
+               alpha=0.2)
     ax[0].set_ylabel(r'$\overline{\Delta \text{Var}}(\hat{\beta})$')
-    ax[1].grid(color='grey', axis='both', linestyle='-', linewidth=0.25,
-               alpha=0.25)
+    ax[1].grid(color='grey', axis='both', linestyle='-.', linewidth=0.25,
+               alpha=0.2)
     ax[1].set_xlabel('t')
     ax[1].set_ylabel(r'$\sum_{r=1}^t\Delta$Var$_r(\hat{\beta})$')
     plt.rcParams.update({'font.size': 12})
@@ -515,18 +490,17 @@ def main():
                          r'$\hat{\beta}^{\text{OLS}}$',
                          r'$\hat{\beta}^{\text{mm}}$'],
                  loc='lower left', ncol=2)
-    leg3 = fig.legend(bbox_to_anchor=(1, 1),
+    leg3 = fig.legend(bbox_to_anchor=(1, .92),
                       handles=[l6, ], loc='outside left upper',
                       title=r'\textbf{Ground truth}',)
     leg2 = fig.legend(bbox_to_anchor=(1, 0.47),
-                      handles=[l1, l3, l4],
+                      handles=[l3, l4],
                       loc='outside left lower',
-                      title=r'\textbf{Rolling window estimators}')
-    leg1 = fig.legend(bbox_to_anchor=(1, 0.27),
-                      handles=[l13, l2, l7, l5],
+                      title=r'\textbf{Time adaptation estimators}')
+    leg1 = fig.legend(bbox_to_anchor=(1, 0.315),
+                      handles=[l2, l7, l5],
                       loc='outside left center',
-                      title=r'\textbf{Estimators using}' +
-                      r'\textbf{ history only}')
+                      title=r'\textbf{Zero-shot estimators}')
     fig.add_artist(leg1)
     fig.add_artist(leg2)
     fig.add_artist(leg3)

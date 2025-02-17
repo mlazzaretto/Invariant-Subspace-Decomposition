@@ -1,7 +1,6 @@
-# %%
 from __future__ import division
 import numpy as np
-from estimator import Estimator
+from isd import ISD
 from scipy.linalg import block_diag
 from scipy.stats import ortho_group
 import statsmodels.api as sm
@@ -21,6 +20,7 @@ plt.rcParams.update({
 })
 width = 6.0
 # functions
+
 
 def gen_data(n, p, m, block_sizes, c_coeffs, OM, rng,
              test=False, test_value=0):
@@ -131,9 +131,10 @@ def main():
                                                    gt_bs,
                                                    gt_const_coeffs,
                                                    OM, rng)
-        est = Estimator(X_hist, Y_hist, [ws_hist]*n_rw)
-        beta_inv, beta_icpt, U, blocks, c_blocks = est.invariant_est()
-        beta_ols = est.get_pooled_est()[:-1, :]
+        est = ISD(X_hist, Y_hist, [ws_hist]*n_rw)
+        beta_inv, beta_icpt, U, blocks, c_blocks = \
+            est.invariant_estimator(k_fold=10)
+        beta_ols = est.get_pooled_est()[:, :]
         beta_err[iter] = np.mean((beta_0-beta_inv)**2)
 
         for tv_idx, tv in enumerate(tv_list):
@@ -312,9 +313,11 @@ def main():
                r'$\mathsf{MSPE}(\hat{\gamma}^{\text{OLS}}_t)-$' +
                r'$\mathsf{MSPE}(\beta^{\text{inv}}+$' +
                r'$\hat{\delta}^{\text{res}}_t)$',
-               r'$\sigma_{\text{ad}}^2\frac{\text{dim}(\mathcal{S}^{\text{inv}})}{m}$'],
+               r'$\sigma_{\text{ad}}^2$' +
+               r'$\frac{\text{dim}(\mathcal{S}^{\text{inv}})}{m}$'],
               fontsize=8)
-    ax.set_xlabel(r'$\sigma_{\text{ad}}^2\frac{\text{dim}(\mathcal{S}^{\text{inv}})}{m}$')
+    ax.set_xlabel(r'$\sigma_{\text{ad}}^2$' +
+                  r'$\frac{\text{dim}(\mathcal{S}^{\text{inv}})}{m}$')
     ax.grid(color='grey', axis='both', linestyle='-', linewidth=0.25,
             alpha=0.25)
     ax.set_xticks(x)
@@ -367,9 +370,11 @@ def main():
               [r'$\mathsf{MSPE}(\hat{\gamma}^{\text{ISD}}_t)$',
                r'$\mathsf{MSPE}(\beta^{\text{inv}}+$' +
                r'$\hat{\delta}^{\text{res}}_t)$',
-               r'$\sigma_{\text{ad}}^2\frac{\text{dim}(\mathcal{S}^{\text{res}})}{m}$'],
+               r'$\sigma_{\text{ad}}^2$' +
+               r'$\frac{\text{dim}(\mathcal{S}^{\text{res}})}{m}$'],
               fontsize=8)
-    ax.set_xlabel(r'$\sigma_{\text{ad}}^2\frac{\text{dim}(\mathcal{S}^{\text{res}})}{m}$')
+    ax.set_xlabel(r'$\sigma_{\text{ad}}^2$' +
+                  r'$\frac{\text{dim}(\mathcal{S}^{\text{res}})}{m}$')
     ax.grid(color='grey', axis='both', linestyle='-', linewidth=0.25,
             alpha=0.25)
     ax.set_xticks(x)

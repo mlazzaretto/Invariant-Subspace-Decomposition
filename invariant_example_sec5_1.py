@@ -2,7 +2,7 @@ from __future__ import division
 import numpy as np
 from scipy.linalg import block_diag
 from scipy.stats import ortho_group
-from estimator import Estimator
+from isd import ISD
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import statsmodels.api as sm
@@ -140,9 +140,10 @@ def main():
                          gt_const_coeffs, OM,
                          test=False, rng=rng_w)
             ws = int(n/8)
-            est = Estimator(X_hist, Y_hist, [ws]*n_rw)
-            beta_inv, beta_icpt, U, blocks, c_blocks = est.invariant_est()
-            beta_ols = est.get_pooled_est()[:-1, :]
+            est = ISD(X_hist, Y_hist, [ws]*n_rw)
+            beta_inv, beta_icpt, U, blocks, c_blocks = \
+                est.invariant_estimator(k_fold=10)
+            beta_ols = est.get_pooled_est()[:, :]
             beta_mm = est.magging_estimator()
 
             beta[0, iter, ni, :] = beta_0.squeeze()
@@ -150,7 +151,7 @@ def main():
             beta[2, iter, ni, :] = beta_ols.squeeze()
             beta[3, iter, ni, :] = beta_mm.squeeze()
 
-            err_beta[iter, ni] = np.mean((beta_0-beta_inv)**2)
+            err_beta[iter, ni] = np.linalg.norm((beta_0-beta_inv))**2
 
             X_test, Y_test, _, gamma_test, Sigma_test = \
                 gen_data(n_test, p, m_test, gt_bs,
@@ -268,7 +269,6 @@ def main():
     b0p = ax.axhline(y=np.linalg.norm(beta[0, 0, 0, :])**2,
                      linestyle='--', color=c[1])
     ax.xaxis.set_ticklabels(['$'+str(nn)+'$' for nn in n_hist])
-    ax.set_ylim([-0.005, 0.3])
     ax.set_xlabel('$n$')
     ax.grid(color='grey', axis='y', linestyle='--', linewidth=0.25,
             alpha=0.25)
@@ -276,7 +276,7 @@ def main():
               [r'$\|\beta^{\text{inv}}-\hat{\beta}^{\text{inv}}\|^2_2$',
               r'$\|\beta^{\text{inv}}\|^2_2$'],
               loc='upper right',
-              bbox_to_anchor=(1, 0.9))
+              bbox_to_anchor=(1, 0.98))
     plt.tight_layout()
     plt.show()
 
